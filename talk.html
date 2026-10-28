@@ -15,8 +15,7 @@
   .back:active{color:#fff}
   .center{position:fixed;left:0;right:0;bottom:0;top:0;display:flex;flex-direction:column;align-items:center;
           justify-content:flex-end;padding-bottom:12vh;pointer-events:none;z-index:4}
-  #status{font-size:17px;font-weight:600;letter-spacing:.3px;text-align:center;padding:0 24px;min-height:26px;
-          transition:color .3s;text-shadow:0 2px 12px #000}
+  #status{font-size:17px;font-weight:600;letter-spacing:.3px;text-align:center;padding:0 24px;min-height:26px;transition:color .3s;text-shadow:0 2px 12px #000}
   #hint{font-size:12.5px;color:#6e7681;margin-top:8px;text-align:center;padding:0 30px}
   .err{position:fixed;bottom:4vh;left:0;right:0;text-align:center;color:#f85149;font-size:12px;padding:0 24px;z-index:6}
 </style></head>
@@ -31,151 +30,74 @@
   <div id="hint">Sharga teging — Maks eshitadi</div>
 </div>
 <div class="err" id="err"></div>
-<script>
-// ====== SOZLAMALAR (endpointlar keyin ulanadi) ======
-// Token BU YERGA YOZILMAYDI. Backend "signed URL" beradi.
-const CONFIG = {
-  sttUrl: "",    // o'zbekcha realtime STT endpoint (ElevenLabs orqali backend)
-  ttsUrl: "",    // o'zbekcha TTS endpoint (ElevenLabs orqali backend)
-  agentUrl: "",  // Maks (Hermes) bilan gaplashish endpoint
-};
+<script type="module">
+import { Conversation } from 'https://cdn.jsdelivr.net/npm/@elevenlabs/client/+esm';
 
-const cv = document.getElementById('c'), ctx = cv.getContext('2d');
-const statusEl = document.getElementById('status'), hintEl = document.getElementById('hint'), errEl = document.getElementById('err');
+// ====== SOZLAMA: backend-proxy manzili (signed URL beradi). Token BU YERDA YO'Q. ======
+const CONFIG = { backendUrl: "" };  // masalan: "https://xxxx.trycloudflare.com"
+
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const statusEl=document.getElementById('status'),hintEl=document.getElementById('hint'),errEl=document.getElementById('err');
 let W,H,DPR=Math.min(devicePixelRatio||1,2),cx,cy;
 function resize(){W=innerWidth;H=innerHeight;cx=W/2;cy=H*0.42;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
 addEventListener('resize',resize);resize();
 
-// ====== Holat ======
-let state='idle'; // idle | listening | thinking | speaking | error
-let energy=0, targetEnergy=0;   // 0..1 pulslash kuchi
-const PAL={idle:[56,189,248],listening:[63,185,80],thinking:[240,180,41],speaking:[88,166,255],error:[248,81,73]};
-const LABEL={idle:'Bosing va gapiring',listening:'Tinglayapman…',thinking:'Oʻylayapman…',speaking:'Maks javob beryapti…',error:'Xatolik'};
-const HINT={idle:'Sharga teging — Maks eshitadi',listening:'Gapiring, tugatgach qayta bosing',thinking:'Bir lahza…',speaking:'…',error:''};
+let state='idle'; let energy=0,targetEnergy=0;
+const PAL={idle:[56,189,248],connecting:[160,160,170],listening:[63,185,80],speaking:[88,166,255],error:[248,81,73]};
+const LABEL={idle:'Bosing va gapiring',connecting:'Ulanyapman…',listening:'Tinglayapman…',speaking:'Maks javob beryapti…',error:'Xatolik'};
+const HINT={idle:'Sharga teging — Maks bilan gaplashing',connecting:'Bir lahza…',listening:'Gapiring…',speaking:'Tugatish uchun qayta bosing',error:''};
 function setState(s){state=s;statusEl.textContent=LABEL[s];hintEl.textContent=HINT[s]||'';const c=PAL[s];statusEl.style.color=`rgb(${c[0]},${c[1]},${c[2]})`;}
 
-// ====== Fibonacci shar nuqtalari ======
-const N=520, pts=[];
-for(let i=0;i<N;i++){const y=1-(i/(N-1))*2;const r=Math.sqrt(1-y*y);const th=Math.PI*(3-Math.sqrt(5))*i;pts.push({x:Math.cos(th)*r,y:y,z:Math.sin(th)*r});}
-
+const N=520,pts=[];
+for(let i=0;i<N;i++){const y=1-(i/(N-1))*2;const r=Math.sqrt(1-y*y);const th=Math.PI*(3-Math.sqrt(5))*i;pts.push({x:Math.cos(th)*r,y,z:Math.sin(th)*r});}
 function draw(t){
   ctx.clearRect(0,0,W,H);
-  // orqa fon nur
-  const col=PAL[state], base=Math.min(W,H)*0.17;
-  energy += (targetEnergy-energy)*0.12;
-  const breathe=0.5+0.5*Math.sin(t*0.0018);
-  const pulse=1 + 0.12*breathe + 0.55*energy;
-  const R=base*pulse;
-  // glow
+  const col=PAL[state],base=Math.min(W,H)*0.17;
+  energy+=(targetEnergy-energy)*0.14;
+  const breathe=0.5+0.5*Math.sin(t*0.0018),pulse=1+0.12*breathe+0.55*energy,R=base*pulse;
   const g=ctx.createRadialGradient(cx,cy,R*0.2,cx,cy,R*2.4);
-  g.addColorStop(0,`rgba(${col[0]},${col[1]},${col[2]},${0.18+0.22*energy})`);
-  g.addColorStop(1,`rgba(${col[0]},${col[1]},${col[2]},0)`);
+  g.addColorStop(0,`rgba(${col[0]},${col[1]},${col[2]},${0.18+0.22*energy})`);g.addColorStop(1,`rgba(${col[0]},${col[1]},${col[2]},0)`);
   ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-  // aylanish
-  const ry=t*0.0004, rx=Math.sin(t*0.0003)*0.5;
-  const cy1=Math.cos(ry),sy=Math.sin(ry),cx1=Math.cos(rx),sx=Math.sin(rx);
-  const proj=[];
-  for(const p of pts){
-    let x=p.x*cy1 - p.z*sy, z=p.x*sy + p.z*cy1, y=p.y;
-    let y2=y*cx1 - z*sx, z2=y*sx + z*cx1;
-    const persp=1/(1.8 - z2*0.6);
-    proj.push({sx:cx + x*R*persp, sy:cy + y2*R*persp, z:z2, persp});
-  }
+  const ry=t*0.0004,rx=Math.sin(t*0.0003)*0.5,cy1=Math.cos(ry),sy=Math.sin(ry),cx1=Math.cos(rx),sx=Math.sin(rx),proj=[];
+  for(const p of pts){let x=p.x*cy1-p.z*sy,z=p.x*sy+p.z*cy1,y=p.y,y2=y*cx1-z*sx,z2=y*sx+z*cx1;const pe=1/(1.8-z2*0.6);proj.push({sx:cx+x*R*pe,sy:cy+y2*R*pe,z:z2});}
   proj.sort((a,b)=>a.z-b.z);
-  for(const p of proj){
-    const depth=(p.z+1)/2; // 0..1
-    const alpha=0.15+0.85*depth;
-    const size=(1.1+2.0*depth)*(0.9+0.5*energy);
-    ctx.beginPath();
-    ctx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
-    ctx.arc(p.sx,p.sy,size,0,7);ctx.fill();
-  }
-  // ichki yadro
-  ctx.beginPath();
-  const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,R*0.5);
-  cg.addColorStop(0,`rgba(255,255,255,${0.5+0.4*energy})`);
-  cg.addColorStop(1,`rgba(${col[0]},${col[1]},${col[2]},0)`);
-  ctx.fillStyle=cg;ctx.arc(cx,cy,R*0.5,0,7);ctx.fill();
+  for(const p of proj){const d=(p.z+1)/2,alpha=0.15+0.85*d,size=(1.1+2.0*d)*(0.9+0.5*energy);ctx.beginPath();ctx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${alpha})`;ctx.arc(p.sx,p.sy,size,0,7);ctx.fill();}
+  const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,R*0.5);cg.addColorStop(0,`rgba(255,255,255,${0.5+0.4*energy})`);cg.addColorStop(1,`rgba(${col[0]},${col[1]},${col[2]},0)`);
+  ctx.beginPath();ctx.fillStyle=cg;ctx.arc(cx,cy,R*0.5,0,7);ctx.fill();
   requestAnimationFrame(draw);
 }
 requestAnimationFrame(draw);
 
-// ====== Audio (mikrofon amplitudasi sharni harakatga keltiradi) ======
-let ac, micAnalyser, micData, micStream, recorder, chunks=[];
-async function ensureAudio(){ if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended') await ac.resume(); }
-
-function levelLoop(){
-  if(state==='listening' && micAnalyser){
-    micAnalyser.getByteTimeDomainData(micData);
-    let sum=0;for(let i=0;i<micData.length;i++){const v=(micData[i]-128)/128;sum+=v*v;}
-    targetEnergy=Math.min(1, Math.sqrt(sum/micData.length)*3.2);
-    requestAnimationFrame(levelLoop);
-  }
-}
-
-async function startListening(){
+// ====== ElevenLabs Conversational AI ======
+let conv=null;
+function energyLoop(){
+  if(!conv){targetEnergy=0;return;}
   try{
-    await ensureAudio();
-    micStream=await navigator.mediaDevices.getUserMedia({audio:true});
-    const src=ac.createMediaStreamSource(micStream);
-    micAnalyser=ac.createAnalyser();micAnalyser.fftSize=512;micData=new Uint8Array(micAnalyser.fftSize);
-    src.connect(micAnalyser);
-    chunks=[];
-    try{recorder=new MediaRecorder(micStream);}catch(e){recorder=null;}
-    if(recorder){recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};recorder.start();}
-    setState('listening');errEl.textContent='';
-    requestAnimationFrame(levelLoop);
-  }catch(e){ setState('error'); errEl.textContent='Mikrofonga ruxsat berilmadi: '+e.message; targetEnergy=0; setTimeout(()=>setState('idle'),2500); }
+    if(state==='speaking'&&conv.getOutputVolume) targetEnergy=Math.min(1,conv.getOutputVolume()*1.4);
+    else if(conv.getInputVolume) targetEnergy=Math.min(1,conv.getInputVolume()*2.2);
+  }catch(e){}
+  requestAnimationFrame(energyLoop);
 }
-
-function stopMic(){ if(recorder&&recorder.state!=='inactive')recorder.stop(); if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;} }
-
-async function stopListeningAndProcess(){
-  const done=new Promise(res=>{ if(recorder){recorder.onstop=()=>res(new Blob(chunks,{type:'audio/webm'}));recorder.stop();} else res(null); });
-  targetEnergy=0; setState('thinking');
-  const blob=await done; stopMic();
+async function startConv(){
+  if(!CONFIG.backendUrl){ setState('error'); errEl.textContent='Backend hali ulanmagan (CONFIG.backendUrl bo\'sh)'; setTimeout(()=>{errEl.textContent='';setState('idle');},3000); return; }
+  setState('connecting'); errEl.textContent='';
   try{
-    const text = await sttTranscribe(blob);
-    const reply = await askMaks(text);
-    setState('speaking');
-    await ttsSpeak(reply);
-    setState('idle');
-  }catch(e){
-    setState('error'); errEl.textContent=e.message; setTimeout(()=>{errEl.textContent='';setState('idle');},3000);
-  }
+    const r=await fetch(CONFIG.backendUrl.replace(/\/$/,'')+'/signed-url');
+    if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error||('backend '+r.status));}
+    const {signedUrl}=await r.json();
+    conv=await Conversation.startSession({
+      signedUrl,
+      onModeChange:({mode})=>setState(mode==='speaking'?'speaking':'listening'),
+      onStatusChange:({status})=>{ if(status==='disconnected'){conv=null;setState('idle');} },
+      onError:(e)=>{ setState('error'); errEl.textContent=(e&&e.message)||'Ulanish xatosi'; }
+    });
+    requestAnimationFrame(energyLoop);
+  }catch(e){ setState('error'); errEl.textContent=e.message; conv=null; setTimeout(()=>{errEl.textContent='';setState('idle');},3500); }
 }
+async function endConv(){ try{ if(conv) await conv.endSession(); }catch(e){} conv=null; targetEnergy=0; setState('idle'); }
 
-// ====== Integratsiya nuqtalari (endpoint ulanmaguncha ogohlantiradi) ======
-async function sttTranscribe(blob){
-  if(!CONFIG.sttUrl) throw new Error('STT modeli hali ulanmagan');
-  const fd=new FormData(); fd.append('audio',blob,'a.webm');
-  const r=await fetch(CONFIG.sttUrl,{method:'POST',body:fd}); if(!r.ok)throw new Error('STT xatosi');
-  return (await r.json()).text||'';
-}
-async function askMaks(text){
-  if(!CONFIG.agentUrl) throw new Error('Maks agenti hali ulanmagan');
-  const r=await fetch(CONFIG.agentUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});
-  if(!r.ok)throw new Error('Maks javob bermadi'); return (await r.json()).reply||'';
-}
-async function ttsSpeak(text){
-  if(!CONFIG.ttsUrl) throw new Error('TTS modeli hali ulanmagan');
-  const r=await fetch(CONFIG.ttsUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
-  if(!r.ok)throw new Error('TTS xatosi'); const ab=await r.arrayBuffer();
-  await ensureAudio(); const buf=await ac.decodeAudioData(ab);
-  const src=ac.createBufferSource();src.buffer=buf;
-  const an=ac.createAnalyser();an.fftSize=512;const d=new Uint8Array(an.fftSize);
-  src.connect(an);an.connect(ac.destination);
-  function spkLoop(){ an.getByteTimeDomainData(d);let s=0;for(let i=0;i<d.length;i++){const v=(d[i]-128)/128;s+=v*v;}targetEnergy=Math.min(1,Math.sqrt(s/d.length)*3);if(state==='speaking')requestAnimationFrame(spkLoop); }
-  return new Promise(res=>{src.onended=()=>{targetEnergy=0;res();};src.start();requestAnimationFrame(spkLoop);});
-}
+cv.addEventListener('click',()=>{ if(state==='idle'||state==='error') startConv(); else endConv(); });
 
-// ====== Tegish ======
-cv.addEventListener('click',()=>{
-  if(state==='idle'||state==='error') startListening();
-  else if(state==='listening') stopListeningAndProcess();
-});
-
-// Telegram Mini App
 try{const tg=window.Telegram&&window.Telegram.WebApp;if(tg){tg.ready();tg.expand();if(tg.setHeaderColor)tg.setHeaderColor('#05070d');if(tg.setBackgroundColor)tg.setBackgroundColor('#05070d');}}catch(e){}
 setState('idle');
 </script>
