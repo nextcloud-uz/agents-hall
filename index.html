@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="uz"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta http-equiv="refresh" content="120">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<title>Maks — Agentlar Ofisi</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{min-height:100%;overflow-x:hidden;overflow-y:auto;background:#0a0e14;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+  #scene{display:block;width:100vw}
+  #hud{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;
+       padding:14px 22px;pointer-events:none;z-index:5}
+  #hud .title{color:#e6edf3;font-size:20px;font-weight:800;text-shadow:0 2px 8px #000}
+  #hud .title b{color:#58a6ff}
+  #hud .sub{color:#8b949e;font-size:12px;margin-top:2px}
+  .stats{display:flex;gap:10px}
+  .stat{background:rgba(22,27,34,.85);border:1px solid #30363d;border-radius:12px;padding:8px 14px;text-align:center;backdrop-filter:blur(6px)}
+  .stat .n{font-size:22px;font-weight:800}.stat .l{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px}
+  .stat.g .n{color:#3fb950}.stat.b .n{color:#58a6ff}.stat.w .n{color:#8b949e}
+  #clock{color:#e6edf3;font-size:15px;font-weight:700;background:rgba(22,27,34,.85);border:1px solid #30363d;
+         border-radius:10px;padding:6px 12px;backdrop-filter:blur(6px)}
+  #panel{position:fixed;top:0;right:-380px;width:360px;height:100%;background:rgba(13,17,23,.97);
+         border-left:1px solid #30363d;padding:24px;transition:right .35s cubic-bezier(.4,0,.2,1);z-index:10;
+         overflow-y:auto;backdrop-filter:blur(12px)}
+  #panel.open{right:0}
+  #panel .x{position:absolute;top:14px;right:16px;color:#8b949e;font-size:26px;cursor:pointer;line-height:1}
+  #panel .x:hover{color:#fff}
+  #panel .big{font-size:46px;margin-bottom:6px}
+  #panel h2{color:#e6edf3;font-size:20px;margin-bottom:2px}
+  #panel .r{color:#58a6ff;font-size:13px;margin-bottom:16px}
+  #panel .row{margin:10px 0;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:10px}
+  #panel .row .k{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px}
+  #panel .row .v{color:#e6edf3;font-size:14px;margin-top:3px}
+  #panel .v.ok{color:#3fb950}#panel .v.err{color:#f85149}
+  #panel .d{color:#adbac7;font-size:13px;line-height:1.6;margin-top:4px}
+  .hint{position:fixed;bottom:10px;left:0;right:0;text-align:center;color:#6e7681;font-size:11px;pointer-events:none;padding:0 10px}
+  @media(max-width:640px){
+    #hud{flex-wrap:wrap;gap:8px;padding:10px 12px}
+    #hud .title{font-size:16px}#hud .sub{display:none}
+    .stat{padding:5px 10px}.stat .n{font-size:17px}.stat .l{font-size:8px}
+    #clock{font-size:12px;padding:4px 9px}
+    #panel{width:100%;right:-100%}
+    .hint{font-size:9.5px}
+  }
+</style></head>
+<body>
+<canvas id="scene"></canvas>
+<div id="hud">
+  <div>
+    <div class="title">🏢 <b>Maks</b> — Agentlar Ofisi</div>
+    <div class="sub">Agent ustiga bosing — tafsilotlarni koʻring · jonli sahna</div>
+  </div>
+  <div class="stats">
+    <div class="stat b"><div class="n" id="s-all">0</div><div class="l">Jami</div></div>
+    <div class="stat g"><div class="n" id="s-act">0</div><div class="l">Faol</div></div>
+    <div class="stat w"><div class="n" id="s-off">0</div><div class="l">Tinch</div></div>
+  </div>
+  <div id="clock">--:--:--</div>
+</div>
+<div id="panel"><span class="x" onclick="closePanel()">×</span><div id="panel-body"></div></div>
+<div class="hint">Oxirgi yangilanish: 28-October 2026, 15:06 · har 15 daqiqada maʼlumot, har 2 daqiqada sahifa yangilanadi</div>
+<script>
+const AGENTS = [{"id": "0cc15205bcf1", "name": "Institut eslatmasi (09:00)", "emoji": "🏛️", "role": "Eslatma", "color": "#d29922", "desc": "Foydalanuvchiga (Legenda, o'zbek tilida, lotin yozuvida) QUYIDAGI aniq formatda chiroyli eslatma yubor. Bold uchun qo'sh yulduzcha (**...**) ishlat. Matnni ayna…", "schedule": "0 9 * * 2,4,6", "next": "2026-10-29T09:00:00+05:00", "last": "2026-10-27T09:00:37.937587+05:00", "status": "ok", "active": true, "script": false}, {"id": "7f2caec0e1ec", "name": "Tennis eslatmasi (payshanba 07:15)", "emoji": "🎾", "role": "Eslatma", "color": "#2ea043", "desc": "Foydalanuvchiga (Legenda, o'zbek tilida, lotin yozuvida) QUYIDAGI aniq formatda chiroyli eslatma yubor. Bold uchun qo'sh yulduzcha (**...**) ishlat. Matnni ayna…", "schedule": "0 7 * * 4", "next": "2026-10-29T07:00:00+05:00", "last": "2026-10-22T07:00:56.516522+05:00", "status": "ok", "active": true, "script": false}, {"id": "085bf43f58ba", "name": "VulnScope agenti (dev+PM)", "emoji": "🛡️", "role": "Xavfsizlik dev + PM", "color": "#f85149", "desc": "VulnScope — zaifliklarni avtomatik skanerlash platformasi (FastAPI backend + React frontend, 30+ skaner, Docker). Kod shu yerda (workdir): /Users/ghost/Download…", "schedule": "30 9 * * *", "next": "2026-10-29T09:30:00+05:00", "last": "", "status": "—", "active": true, "script": false}, {"id": "1fddb26c489a", "name": "CRM ElevenLabs agenti (dev+PM)", "emoji": "📞", "role": "CRM dev + PM", "color": "#58a6ff", "desc": "Dilmurod aka korxonasi uchun avtomatlashtirilgan CRM. Yechim: ElevenLabs Conversational AI (ovozli agent) + SIP telefoniya. 1-etap: (a) og'ir texnika (greyder, …", "schedule": "40 9 * * *", "next": "2026-10-29T09:40:00+05:00", "last": "", "status": "—", "active": true, "script": false}, {"id": "09603d5237a9", "name": "Office dashboard yangilovchi", "emoji": "🖥️", "role": "Office xizmati", "color": "#3fb950", "desc": "Vazifa belgilanmagan.", "schedule": "every 15m", "next": "2026-10-28T15:08:38.789676+05:00", "last": "2026-10-28T14:53:38.789676+05:00", "status": "ok", "active": true, "script": true}];
+const cv = document.getElementById('scene'), ctx = cv.getContext('2d');
+let W, H, DPR = Math.min(window.devicePixelRatio||1, 2);
+let contentH = 0;
+function resize(){
+  W=window.innerWidth;
+  layout();
+  const vh = window.innerHeight;
+  H = Math.max(vh, contentH);
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize);
+
+document.getElementById('s-all').textContent = AGENTS.length;
+document.getElementById('s-act').textContent = AGENTS.filter(a=>a.active).length;
+document.getElementById('s-off').textContent = AGENTS.filter(a=>!a.active).length;
+
+let stations = [];
+function layout(){
+  stations = [];
+  const n = AGENTS.length || 1;
+  const pad = 40, topY = 160, availW = W - pad*2;
+  const minCol = 220;
+  let cols = Math.max(1, Math.min(n, Math.floor(availW / minCol)));
+  const cellW = availW / cols;
+  const rowH = 240;
+  AGENTS.forEach((a,i)=>{
+    const col = i % cols, row = Math.floor(i/cols);
+    const cx = pad + cellW*col + cellW/2;
+    const cy = topY + row*rowH;
+    stations.push({a, cx, cy, i, hit:{x:cx-95,y:cy-20,w:190,h:180}});
+  });
+  const rows = Math.ceil(n/cols);
+  contentH = topY + rows*rowH + 40;
+}
+
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+let mouse={x:-1,y:-1}, hoverIdx=-1;
+cv.addEventListener('mousemove', e=>{const r=cv.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;});
+cv.addEventListener('click', e=>{const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+  for(const s of stations){const h=s.hit;if(mx>=h.x&&mx<=h.x+h.w&&my>=h.y&&my<=h.y+h.h){openPanel(s.a);return;}}});
+
+function openPanel(a){
+  const sc = a.status==='ok'?'ok':(a.status&&a.status!=='—'?'err':'');
+  const fmt = t=>{if(!t)return'—';try{const d=new Date(t);return d.toLocaleString('uz',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return t.slice(0,16);}};
+  document.getElementById('panel-body').innerHTML =
+    '<div class="big">'+a.emoji+'</div><h2>'+a.name+'</h2><div class="r">'+a.role+(a.active?' · 🟢 faol':' · ⚪ tinch')+'</div>'+
+    '<div class="row"><div class="k">Nima qiladi</div><div class="d">'+a.desc+'</div></div>'+
+    '<div class="row"><div class="k">Jadval</div><div class="v">⏱ '+a.schedule+'</div></div>'+
+    '<div class="row"><div class="k">Keyingi ishga tushish</div><div class="v">▶ '+fmt(a.next)+'</div></div>'+
+    '<div class="row"><div class="k">Oxirgi ishlagan</div><div class="v">↩ '+fmt(a.last)+'</div></div>'+
+    '<div class="row"><div class="k">Oxirgi natija</div><div class="v '+sc+'">● '+a.status+'</div></div>';
+  document.getElementById('panel').classList.add('open');
+}
+function closePanel(){document.getElementById('panel').classList.remove('open');}
+
+const dust = Array.from({length:40},()=>({x:Math.random(),y:Math.random(),s:Math.random()*1.5+.3,v:Math.random()*.0004+.0001}));
+
+function drawBG(t){
+  let g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#141b26');g.addColorStop(.62,'#0f141c');g.addColorStop(.62,'#0c1016');g.addColorStop(1,'#0a0d12');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  const fy=H*0.62;
+  ctx.strokeStyle='rgba(88,166,255,.08)';ctx.lineWidth=1;
+  for(let i=0;i<8;i++){ctx.beginPath();ctx.moveTo(0,fy+i*((H-fy)/8));ctx.lineTo(W,fy+i*((H-fy)/8));ctx.stroke();}
+  for(let wx=60;wx<W-120;wx+=360){
+    ctx.fillStyle='rgba(88,166,255,.05)';rr(wx,70,180,80,8);ctx.fill();
+    const sun=90+Math.sin(t*.0003+wx)*40;
+    let sg=ctx.createRadialGradient(wx+sun,110,4,wx+sun,110,50);
+    sg.addColorStop(0,'rgba(240,200,120,.25)');sg.addColorStop(1,'rgba(240,200,120,0)');
+    ctx.fillStyle=sg;ctx.fillRect(wx,70,180,80);
+    ctx.strokeStyle='rgba(48,54,61,.6)';ctx.lineWidth=2;rr(wx,70,180,80,8);ctx.stroke();
+  }
+  dust.forEach(d=>{d.y-=d.v;if(d.y<0){d.y=1;d.x=Math.random();}
+    ctx.fillStyle='rgba(200,220,255,.10)';ctx.beginPath();ctx.arc(d.x*W,d.y*H,d.s,0,7);ctx.fill();});
+}
+
+function drawAgent(s,t){
+  const {a,cx,cy}=s; const active=a.active;
+  const hov = hoverIdx===s.i;
+  const bob = active? Math.sin(t*.004 + s.i)*2 : 0;
+  ctx.fillStyle='#2b2113';rr(cx-70,cy+92,140,14,4);ctx.fill();
+  ctx.fillStyle='#3a2c1a';rr(cx-62,cy+80,124,14,3);ctx.fill();
+  ctx.fillStyle='#20262e';rr(cx-26,cy+30,52,66,10);ctx.fill();
+  ctx.fillStyle='#0b0f14';rr(cx+24,cy+40,54,40,5);ctx.fill();
+  if(active){
+    const fl = .5+.5*Math.abs(Math.sin(t*.006+s.i));
+    let mg=ctx.createLinearGradient(cx+26,cy+42,cx+76,cy+78);
+    mg.addColorStop(0,a.color);mg.addColorStop(1,'#0d1117');
+    ctx.globalAlpha=.35+.3*fl;ctx.fillStyle=mg;rr(cx+27,cy+43,48,34,3);ctx.fill();ctx.globalAlpha=1;
+    ctx.fillStyle='rgba(230,240,255,.5)';
+    for(let l=0;l<4;l++){const lw=10+((Math.sin(t*.003+l+s.i)+1)*12);ctx.fillRect(cx+30,cy+46+l*7,lw,2);}
+  } else {
+    ctx.fillStyle='rgba(120,130,140,.15)';rr(cx+27,cy+43,48,34,3);ctx.fill();
+  }
+  ctx.fillStyle='#30363d';ctx.fillRect(cx+48,cy+80,6,8);ctx.fillRect(cx+40,cy+88,22,3);
+  ctx.fillStyle=active?a.color:'#4a525c';
+  rr(cx-20,cy+40+bob,40,46,14);ctx.fill();
+  const armSwing = active? Math.sin(t*.02+s.i)*4 : 0;
+  ctx.strokeStyle=active?a.color:'#4a525c';ctx.lineWidth=7;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(cx-12,cy+54+bob);ctx.lineTo(cx+20,cy+70+armSwing);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx+12,cy+54+bob);ctx.lineTo(cx+22,cy+70-armSwing);ctx.stroke();
+  ctx.fillStyle=active?'#f0d9b5':'#8a8f96';
+  ctx.beginPath();ctx.arc(cx,cy+26+bob,16,0,7);ctx.fill();
+  ctx.fillStyle=active?'#2a2118':'#3a3f46';
+  ctx.beginPath();ctx.arc(cx,cy+22+bob,16,Math.PI,0);ctx.fill();
+  ctx.font='20px serif';ctx.textAlign='center';
+  if(hov){ctx.save();ctx.shadowColor=a.color;ctx.shadowBlur=16;}
+  ctx.fillText(a.emoji, cx, cy-2+bob);
+  if(hov)ctx.restore();
+  const blink = active? .5+.5*Math.sin(t*.006) : .3;
+  ctx.fillStyle = active? 'rgba(63,185,80,'+blink+')' : 'rgba(110,118,129,.5)';
+  ctx.beginPath();ctx.arc(cx+58,cy+36,5,0,7);ctx.fill();
+  if(active){ctx.strokeStyle='rgba(63,185,80,'+(blink*.4)+')';ctx.lineWidth=2;ctx.beginPath();ctx.arc(cx+58,cy+36,9,0,7);ctx.stroke();}
+  ctx.fillStyle=hov?'#fff':'#c9d1d9';ctx.font=(hov?'bold ':'')+'12px -apple-system,sans-serif';
+  const nm=a.name.length>22?a.name.slice(0,21)+'…':a.name;
+  ctx.fillText(nm, cx, cy+124);
+  ctx.fillStyle='#8b949e';ctx.font='10px sans-serif';
+  ctx.fillText(a.role, cx, cy+138);
+  if(hov){
+    ctx.strokeStyle=a.color;ctx.lineWidth=2;rr(cx-78,cy-14,156,158,16);ctx.stroke();
+    const bw=Math.min(230, a.desc.length*5.2+24), bx=cx-bw/2, by=cy-74;
+    ctx.fillStyle='rgba(13,17,23,.95)';ctx.strokeStyle=a.color;ctx.lineWidth=1.5;
+    rr(bx,by,bw,40,8);ctx.fill();ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx-6,by+40);ctx.lineTo(cx+6,by+40);ctx.lineTo(cx,by+48);ctx.fill();
+    ctx.fillStyle='#e6edf3';ctx.font='10.5px sans-serif';ctx.textAlign='center';
+    const words=a.desc.split(' ');let line='',ly=by+16;const maxc=Math.floor(bw/5.2);
+    for(const w of words){if((line+w).length>maxc){ctx.fillText(line,cx,ly);line=w+' ';ly+=12;if(ly>by+36)break;}else line+=w+' ';}
+    if(ly<=by+36)ctx.fillText(line,cx,ly);
+  }
+}
+
+function drawMaks(t){
+  const fy=H*0.62;
+  const px = W*(0.5 + 0.42*Math.sin(t*.0004));
+  const dir = Math.cos(t*.0004)>=0?1:-1;
+  const y = fy+40;
+  const leg = Math.sin(t*.012)*6;
+  ctx.strokeStyle='#d29922';ctx.lineWidth=6;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(px,y);ctx.lineTo(px-6,y+22+Math.max(0,leg));ctx.stroke();
+  ctx.beginPath();ctx.moveTo(px,y);ctx.lineTo(px+6,y+22+Math.max(0,-leg));ctx.stroke();
+  ctx.fillStyle='#d29922';rr(px-12,y-30,24,34,10);ctx.fill();
+  ctx.beginPath();ctx.moveTo(px,y-8);ctx.lineTo(px+dir*14,y-2+Math.sin(t*.012)*4);ctx.lineWidth=5;ctx.strokeStyle='#d29922';ctx.stroke();
+  ctx.fillStyle='#f0d9b5';ctx.beginPath();ctx.arc(px,y-40,12,0,7);ctx.fill();
+  ctx.fillStyle='#2a2118';ctx.beginPath();ctx.arc(px,y-44,12,Math.PI,0);ctx.fill();
+  ctx.font='16px serif';ctx.textAlign='center';ctx.fillText('🧠',px,y-58);
+  ctx.fillStyle='#d29922';ctx.font='bold 10px sans-serif';ctx.fillText('Maks (menejer)',px,y+42);
+}
+
+function frame(t){
+  hoverIdx=-1;
+  for(const s of stations){const h=s.hit;if(mouse.x>=h.x&&mouse.x<=h.x+h.w&&mouse.y>=h.y&&mouse.y<=h.y+h.h){hoverIdx=s.i;break;}}
+  drawBG(t);
+  drawMaks(t);
+  for(const s of stations) if(s.i!==hoverIdx) drawAgent(s,t);
+  for(const s of stations) if(s.i===hoverIdx) drawAgent(s,t);
+  cv.style.cursor = hoverIdx>=0?'pointer':'default';
+  requestAnimationFrame(frame);
+}
+
+function tickClock(){const d=new Date();document.getElementById('clock').textContent=d.toLocaleTimeString('uz');}
+setInterval(tickClock,1000);tickClock();
+
+// Telegram Mini App integratsiyasi (Telegram ichida ochilsa)
+try{
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if(tg){ tg.ready(); tg.expand(); if(tg.setHeaderColor) tg.setHeaderColor('#0a0e14'); if(tg.setBackgroundColor) tg.setBackgroundColor('#0a0e14'); }
+}catch(e){}
+
+resize();requestAnimationFrame(frame);
+</script>
+</body></html>
